@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     tools {
-        maven 'Maven-3.9.9'  // Chọn Maven version đã cài trên Jenkins
+        maven 'Maven-3.9.9'  // Chọn Maven
     }
 
     stages {
@@ -15,6 +15,12 @@ pipeline {
         stage('Build') {
             steps {
                 sh 'mvn clean package'
+            }
+            post {
+                    success {
+                        echo 'Archiving the artifacts'
+                                archiveArtifacts artifacts: '**/target/*.war'
+                        }
             }
         }
 
