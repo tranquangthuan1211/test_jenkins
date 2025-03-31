@@ -2,50 +2,101 @@ pipeline {
     agent any
 
     tools {
-        maven 'Maven-3.9.9'  // Chọn Maven
+        maven 'maven3.9.9'
+    }
+
+    options {
+        skipDefaultCheckout()
+    }
+
+    environment {
+        BUILD_VETS = "false"
+        BUILD_VISITS = "false"
+        BUILD_CUSTOMERS = "false"
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
-                git 'https://github.com/tranquangthuan1211/test_jenkins.git'
+                script {
+                    checkout scm
+                }
             }
         }
 
-        stage('Build') {
+        stage('Detect Changes') {
             steps {
-                sh 'mvn clean package'
+                script {
+                    def changedFiles = sh(script: "git diff --name-only HEAD~1", returnStdout: true).trim()
+                    echo "Changed files:\n${changedFiles}"
+
+                    env.BUILD_VETS = changedFiles.contains("vets-service/")
+                    env.BUILD_VISITS = changedFiles.contains("visits-service/")
+                    env.BUILD_CUSTOMERS = changedFiles.contains("customers-service/")
+                    echo "BUILD_VETS: ${env.BUILD_VETS}"
+                    echo "BUILD_VISITS: ${env.BUILD_VISITS}"
+                    echo "BUILD_CUSTOMERS: ${env.BUILD_CUSTOMERS}"
+                }
             }
-            post {
-                    success {
-                        echo 'Archiving the artifacts'
-                                archiveArtifacts artifacts: '**/target/*.war'
+        }
+
+        stage('Build & Test Services') {
+            matrix {
+                axes {
+                    axis {
+                        name 'SERVICE'
+                        values 'spring-petclinic-vets-service',
+                               'spring-petclinic-visits-service',
+                               'spring-petclinic-customers-service'
+                    }
+                }
+
+                when {
+                    expression {
+                        return (SERVICE == 'spring-petclinic-vets-service' && env.BUILD_VETS == "true") ||
+                               (SERVICE == 'spring-petclinic-visits-service' && env.BUILD_VISITS == "true") ||
+                               (SERVICE == 'spring-petclinic-customers-service' && env.BUILD_CUSTOMERS == "true")
+                    }
+                }
+
+                stages {
+                    stage('Build') {
+                        steps {
+                            dir("${SERVICE}") {
+                                sh "mvn clean package -DskipTests"
+                            }
                         }
+                    }
+                    stage('Test') {
+                        steps {
+                            dir("${SERVICE}") {
+                                sh "mvn test verify"
+                                junit '**/target/surefire-reports/*.xml'
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        stage('Run Tests') {
+        stage('Publish Coverage') {
             steps {
-                sh 'mvn -Dtest=com.example.demo.* test'
+                jacoco(
+                    execPattern: '**/target/jacoco.exec',
+                    classPattern: '**/target/classes',
+                    sourcePattern: '**/src/main/java',
+                    inclusionPattern: '**/*.class',
+                    exclusionPattern: '**/*Test.class',
+                    minimumInstructionCoverage: '70',
+                    minimumBranchCoverage: '70'
+                )
             }
         }
+    }
 
-        stage('Upload Test Results') {
-            steps {
-                junit '**/target/surefire-reports/*.xml'
-            }
-        }
-
-        stage('Run Code Coverage') {
-            steps {
-                sh 'mvn verify'  // Chạy JaCoCo
-            }
-        }
-
-        stage('Upload Coverage Report') {
-            steps {
-                jacoco execPattern: '**/target/jacoco.exec'
-            }
+    post {
+        always {
+            echo "Pipeline completed!"
         }
     }
 }
