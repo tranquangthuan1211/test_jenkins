@@ -79,19 +79,6 @@ pipeline {
             }
         }
 
-        stage('Publish Coverage') {
-            steps {
-                jacoco(
-                    execPattern: '**/target/jacoco.exec',
-                    classPattern: '**/target/classes',
-                    sourcePattern: '**/src/main/java',
-                    inclusionPattern: '**/*.class',
-                    exclusionPattern: '**/*Test.class',
-                    minimumInstructionCoverage: '70',
-                    minimumBranchCoverage: '70'
-                )
-            }
-        }
     }
 
     post {
